@@ -1,3 +1,6 @@
+# Edge Impulse models
+*.eim
+
 # Profiling results
 *.csv
 

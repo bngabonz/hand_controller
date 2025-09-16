@@ -33,7 +33,7 @@ from timeit import default_timer as timer
 from collections import deque
 from typing import Tuple, Optional
 
-from flask import Flask, Response, render_template_string
+from flask import Flask, Response, render_template_string, render_template, jsonify 
 
 # project paths (keep your layout)
 sys.path.append(os.path.abspath('blaze_app_python/'))
@@ -451,48 +451,16 @@ def processing_worker():
 _frame_counter = 0
 _last_frame_time = 0
 
-INDEX_HTML = """
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Hand Controller Stream (QCS6490)</title>
-  <style>
-    body { background:#111; color:#eee; font-family:system-ui,Arial,sans-serif; }
-    .wrap { max-width: 1100px; margin: 24px auto; }
-    .card { background:#1b1b1b; border-radius:14px; padding:16px; box-shadow:0 4px 18px rgba(0,0,0,.35); }
-    img { width:100%; height:auto; border-radius:10px; }
-    .meta { font-size: 14px; opacity:.8; margin-top: 8px; }
-    code { background:#222; padding:2px 6px; border-radius:6px; }
-    .pill { display:inline-block; padding:4px 10px; margin-right:8px; border-radius:999px; background:#2a2a2a; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h2>Hand Controller Stream (Edge Impulse FOMO)</h2>
-    <div class="card">
-      <img src="/video_feed" alt="live stream"/>
-      <div class="meta">
-        <span class="pill">Model: {{ model }}</span>
-        <span class="pill">Input: {{ inp }}</span>
-        <span class="pill">JPEG: {{ jpegq }}</span>
-      </div>
-      <p>Open this page from your Linux host: <code>http://KIT_IP:{{ port }}/</code></p>
-      <p>Raw MJPEG endpoint: <a href="/video_feed">/video_feed</a></p>
-    </div>
-  </div>
-</body>
-</html>
-"""
 
 @app.route("/")
 def index():
-    return render_template_string(INDEX_HTML,
-        model=os.path.basename(ARGS.model),
-        inp=ARGS.input or "auto (USB cam)",
-        jpegq=ARGS.jpeg_quality,
-        port=ARGS.port
+    return render_template('index.html',
+        model_name=os.path.basename(ARGS.model),
+        input_source=ARGS.input or "Auto (USB Camera)",
+        jpeg_quality=ARGS.jpeg_quality,
+        host=ARGS.host,
+        port=ARGS.port,
+        hostname=socket.gethostname()
     )
 
 @app.route("/video_feed")
@@ -514,9 +482,14 @@ def video_feed():
                 
     return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
+
 @app.route("/healthz")
 def healthz():
-    return "ok", 200
+    return jsonify({
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "service": "hand_controller_ei1fomo_dials_flask"
+    })
 
 # -------------------- Main --------------------
 if __name__ == "__main__":
