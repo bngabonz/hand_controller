@@ -33,7 +33,7 @@ from timeit import default_timer as timer
 from collections import deque
 from typing import Tuple, Optional
 
-from flask import Flask, Response, render_template_string 
+from flask import Flask, Response, render_template_string
 
 # project paths (keep your layout)
 sys.path.append(os.path.abspath('blaze_app_python/'))
@@ -57,6 +57,7 @@ _latest_frame = None
 _last_lock_ts = 0.0
 
 # -------------------- Args ---------------------
+
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 
@@ -310,6 +311,7 @@ def processing_worker():
                 profile_fomo_model = timer() - start
 
                 # post: parse bboxes and build dials inputs
+                global _frame_counter
                 start = timer()
                 lh_data, rh_data = None, None
                 if "result" in res and "bounding_boxes" in res["result"]:
@@ -424,7 +426,7 @@ def processing_worker():
                     rt_fps_count = 0
 
                 # Debug: print dials
-                print(f"[INFO] DIALS XY={delta_xy[0]:+.3f}|{delta_xy[1]:+.3f}, Z={delta_z[0]:+.3f}|{delta_z[1]:+.3f}")
+                #print(f"[INFO] DIALS XY={delta_xy[0]:+.3f}|{delta_xy[1]:+.3f}, Z={delta_z[0]:+.3f}|{delta_z[1]:+.3f}")
 
                 # --- publish to MJPEG ---
                 ok, buf = cv2.imencode(".jpg", output,
@@ -432,6 +434,7 @@ def processing_worker():
                 if ok:
                     _latest_frame = buf.tobytes()
                     _last_lock_ts = time.time()
+                    _frame_counter += 1  
                 else:
                     # if encode fails, skip this frame
                     pass
@@ -444,6 +447,10 @@ def processing_worker():
                 pass
 
 # -------------------- Flask endpoints --------------------
+# Global variables for frame synchronization (add these at the top with other globals)
+_frame_counter = 0
+_last_frame_time = 0
+
 INDEX_HTML = """
 <!doctype html>
 <html>
@@ -490,15 +497,22 @@ def index():
 
 @app.route("/video_feed")
 def video_feed():
-    def gen():
+    def generate():
+        global _frame_counter
+        last_frame_id = -1
+        
         while True:
-            if _latest_frame is None:
-                time.sleep(0.01)
-                continue
-            yield (b"--frame\r\n"
-                   b"Content-Type: image/jpeg\r\n\r\n" + _latest_frame + b"\r\n")
-            time.sleep(0.001)
-    return Response(gen(), mimetype="multipart/x-mixed-replace; boundary=frame")
+            # Check if we have a new frame
+            current_frame_id = _frame_counter
+            if current_frame_id != last_frame_id and _latest_frame is not None:
+                last_frame_id = current_frame_id
+                yield (b"--frame\r\n"
+                       b"Content-Type: image/jpeg\r\n\r\n" + _latest_frame + b"\r\n")
+            else:
+                # No new frame, sleep briefly
+                time.sleep(0.01)  # 10ms sleep is better than 1ms
+                
+    return Response(generate(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
 @app.route("/healthz")
 def healthz():
