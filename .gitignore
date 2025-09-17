@@ -4,6 +4,9 @@
 # Profiling results
 *.csv
 
+# Blaze Application
+blaze_app_python/
+
 # ASL PointNet model (download with get_model.sh instead)
 asl_pointnet/*.pth
 
